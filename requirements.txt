@@ -1,0 +1,8 @@
+mnemonic
+bip_utils
+bech32
+pycryptodome
+qrcode
+httpx
+betterproto
+ecdsa
