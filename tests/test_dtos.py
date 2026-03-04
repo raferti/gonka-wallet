@@ -22,11 +22,17 @@ class TestCoinDto:
 
 
 class TestSendResponseDto:
-    def test_error_factory(self):
-        resp = SendResponseDto.error("from", "to", 100, 5, "fail")
+    def test_error_factory_with_code(self):
+        resp = SendResponseDto.error("from", "to", 100, log="fail", code=5)
         assert not resp.is_success
         assert resp.code == 5
         assert resp.tx_hash == ""
+        assert resp.log == "fail"
+
+    def test_error_factory_default_code(self):
+        resp = SendResponseDto.error("from", "to", 100, log="fail")
+        assert not resp.is_success
+        assert resp.code == 1
         assert resp.log == "fail"
 
 

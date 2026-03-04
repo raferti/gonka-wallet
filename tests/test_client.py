@@ -4,8 +4,8 @@ import pytest
 
 from gonka_wallet.client.client import GonkaClient
 from gonka_wallet.dto.coin import CoinDto, NanoGonkaCoinDto
-from gonka_wallet.dto.response import BalanceResponseDto, BroadcastTxResponseDto, SendResponseDto
-from gonka_wallet.exceptions.client import AccountNotFoundError, TransactionNotFound, TransactionTimeout
+from gonka_wallet.dto.response import AccountResponseDto, BalanceResponseDto, BroadcastTxResponseDto, SendResponseDto
+from gonka_wallet.exceptions.client import TransactionNotFound, TransactionTimeout
 
 
 @pytest.fixture
@@ -33,29 +33,37 @@ def receiver_address(chain_config):
 class TestBalance:
     def test_returns_balance_response(self, client, mock_query):
         coins = [CoinDto(denom="ngonka", amount="1000")]
-        mock_query.query_all_balances.return_value = coins
+        mock_query.query_all_balances.return_value = BalanceResponseDto(
+            address="gonka1abc", balances=coins, code=0, log=""
+        )
 
         result = client.balance("gonka1abc")
         assert isinstance(result, BalanceResponseDto)
         assert result.address == "gonka1abc"
         assert result.balances == coins
+        assert result.code == 0
+        assert result.log == ""
         mock_query.query_all_balances.assert_called_once_with("gonka1abc")
 
 
 class TestVestingBalance:
     def test_returns_balance_response(self, client, mock_query):
         coins = [CoinDto(denom="ngonka", amount="2000")]
-        mock_query.query_total_vesting.return_value = coins
+        mock_query.query_total_vesting.return_value = BalanceResponseDto(
+            address="gonka1abc", balances=coins, code=0, log=""
+        )
 
         result = client.vesting_balance("gonka1abc")
         assert isinstance(result, BalanceResponseDto)
         assert result.balances == coins
+        assert result.code == 0
+        assert result.log == ""
         mock_query.query_total_vesting.assert_called_once_with("gonka1abc")
 
 
 class TestSend:
     def test_success(self, client, mock_query, known_private_key, sender_address, receiver_address):
-        mock_query.query_account.return_value = (0, 0)
+        mock_query.query_account.return_value = AccountResponseDto(account_number=0, sequence=0)
         mock_query.broadcast_tx.return_value = BroadcastTxResponseDto(
             tx_hash="ABCD1234", code=0, log=""
         )
@@ -71,7 +79,7 @@ class TestSend:
         assert result.tx_hash == "ABCD1234"
 
     def test_broadcast_error(self, client, mock_query, known_private_key, sender_address, receiver_address):
-        mock_query.query_account.return_value = (0, 0)
+        mock_query.query_account.return_value = AccountResponseDto(account_number=0, sequence=0)
         mock_query.broadcast_tx.return_value = BroadcastTxResponseDto(
             tx_hash="", code=5, log="insufficient funds"
         )
@@ -86,7 +94,9 @@ class TestSend:
         assert result.code == 5
 
     def test_account_not_found(self, client, mock_query, known_private_key, sender_address, receiver_address):
-        mock_query.query_account.side_effect = AccountNotFoundError("not found")
+        mock_query.query_account.return_value = AccountResponseDto(
+            account_number=0, sequence=0, code=22, log="account not found"
+        )
 
         result = client.send(
             private_key=known_private_key,
@@ -95,6 +105,7 @@ class TestSend:
             amount=NanoGonkaCoinDto("1000"),
         )
         assert not result.is_success
+        assert result.code == 22
         assert "not found" in result.log
 
     def test_invalid_address(self, client, known_private_key, receiver_address):

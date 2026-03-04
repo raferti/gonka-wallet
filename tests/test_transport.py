@@ -4,6 +4,7 @@ import httpx
 import pytest
 
 from gonka_wallet.client.transport import HttpTransport
+from gonka_wallet.exceptions.client import TransportError
 
 
 @pytest.fixture
@@ -32,7 +33,7 @@ class TestGet:
 
     def test_network_error(self, transport, mock_httpx_client):
         mock_httpx_client.get.side_effect = httpx.ConnectError("connection refused")
-        with pytest.raises(ConnectionError):
+        with pytest.raises(TransportError):
             transport.get("http://example.com/api")
 
     def test_http_500(self, transport, mock_httpx_client):
@@ -43,8 +44,9 @@ class TestGet:
         )
         mock_httpx_client.get.return_value = mock_response
 
-        with pytest.raises(ConnectionError, match="500"):
+        with pytest.raises(TransportError) as exc_info:
             transport.get("http://example.com/api")
+        assert exc_info.value.status_code == 500
 
 
 class TestPost:

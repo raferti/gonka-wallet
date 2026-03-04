@@ -2,6 +2,8 @@
 
 import httpx
 
+from ..exceptions.client import TransportError
+
 
 class HttpTransport:
     def __init__(self, timeout: int = 30):
@@ -23,9 +25,9 @@ class HttpTransport:
             response.raise_for_status()
             return response.json()
         except httpx.RequestError as e:
-            raise ConnectionError(f"HTTP GET failed: {e}") from e
+            raise TransportError(f"HTTP GET failed: {e}") from e
         except httpx.HTTPStatusError as e:
-            raise ConnectionError(f"HTTP GET failed with status {e.response.status_code}") from e
+            raise TransportError(str(e), status_code=e.response.status_code) from e
 
     def post(self, url: str, payload: dict) -> dict:
         """HTTP POST JSON, returns JSON."""
@@ -34,13 +36,13 @@ class HttpTransport:
             response.raise_for_status()
             return response.json()
         except httpx.RequestError as e:
-            raise ConnectionError(f"HTTP POST failed: {e}") from e
+            raise TransportError(f"HTTP POST failed: {e}") from e
         except httpx.HTTPStatusError as e:
-            raise ConnectionError(f"HTTP POST failed with status {e.response.status_code}") from e
+            raise TransportError(str(e), status_code=e.response.status_code) from e
 
     def get_raw(self, url: str, params: dict = None) -> httpx.Response:
         """HTTP GET, returns raw Response (for non-200 handling)."""
         try:
             return self._client.get(url, params=params)
         except httpx.RequestError as e:
-            raise ConnectionError(f"HTTP GET failed: {e}") from e
+            raise TransportError(f"HTTP GET failed: {e}") from e

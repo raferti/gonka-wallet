@@ -17,6 +17,6 @@ DEFAULT_CHAIN_CONFIG = ChainConfig(
     chain_id="gonka-mainnet",
     fee_denom="ngonka",
     address_prefix="gonka",
-    node_chain_rpc_url="http://node2.gonka.ai:8000/chain-rpc",
-    node_chain_api_url="http://node2.gonka.ai:8000/chain-api",
+    node_chain_rpc_url="http://node1.gonka.ai:8000/chain-rpc",
+    node_chain_api_url="http://node1.gonka.ai:8000/chain-api",
 )

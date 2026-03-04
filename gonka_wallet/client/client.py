@@ -9,7 +9,7 @@ from .query_service import GonkaQueryService
 from ..config import ChainConfig
 from ..dto.coin import CoinDto
 from ..dto.response import BalanceResponseDto, SendResponseDto
-from ..exceptions.client import AccountNotFoundError, TransactionNotFound, TransactionTimeout
+from ..exceptions.client import TransactionNotFound, TransactionTimeout
 from ..tx.builder import TxBuilder
 
 
@@ -40,8 +40,7 @@ class GonkaClient:
 
     def balance(self, address: str) -> BalanceResponseDto:
         """Query all balances for an address."""
-        balances = self._query.query_all_balances(address)
-        return BalanceResponseDto(address=address, balances=balances)
+        return self._query.query_all_balances(address)
 
     def send(
         self, private_key: str, from_address: str, to_address: str, amount: CoinDto,
@@ -52,10 +51,12 @@ class GonkaClient:
         _validate_bech32_address(from_address)
         _validate_bech32_address(to_address)
 
-        try:
-            account_number, sequence = self._query.query_account(from_address)
-        except AccountNotFoundError as e:
-            return SendResponseDto.error(from_address, to_address, int(amount.amount), 22, str(e))
+        account = self._query.query_account(from_address)
+        if not account.is_success:
+            return SendResponseDto.error(
+                from_address, to_address, amount.amount,
+                log=account.log, code=account.code,
+            )
 
         tx_builder = TxBuilder(chain_id=self._config.chain_id)
         transaction_bytes = tx_builder.build_send_tx(
@@ -63,8 +64,8 @@ class GonkaClient:
             from_address=from_address,
             to_address=to_address,
             amount=amount,
-            account_number=account_number,
-            sequence=sequence,
+            account_number=account.account_number,
+            sequence=account.sequence,
             gas_limit=gas_limit,
             fee_amount=fee_amount,
             fee_denom=self._config.fee_denom,
@@ -73,25 +74,24 @@ class GonkaClient:
 
         broadcast_response = self._query.broadcast_tx(transaction_bytes, broadcast_mode)
 
-        amount_int = int(amount.amount)
-
         if not broadcast_response.is_success:
             return SendResponseDto.error(
-                from_address, to_address, amount_int,
-                broadcast_response.code, broadcast_response.log,
+                from_address, to_address, amount.amount,
+                log=broadcast_response.log,
+                code=broadcast_response.code,
+                tx_hash=broadcast_response.tx_hash,
             )
 
         return SendResponseDto(
             tx_hash=broadcast_response.tx_hash,
             from_address=from_address,
             to_address=to_address,
-            amount=amount_int,
+            amount=amount.amount,
         )
 
     def vesting_balance(self, address: str) -> BalanceResponseDto:
         """Query total vesting balance for an address."""
-        balances = self._query.query_total_vesting(address)
-        return BalanceResponseDto(address=address, balances=balances)
+        return self._query.query_total_vesting(address)
 
     def get_tx(self, tx_hash: str) -> dict:
         """Query a transaction by hash."""

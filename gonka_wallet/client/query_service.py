@@ -12,8 +12,8 @@ from ..dto.query import (
     QueryAllBalancesRequestDto,
     QueryAllBalancesResponseDto,
 )
-from ..dto.response import BroadcastTxResponseDto
-from ..exceptions.client import AccountNotFoundError, TransactionNotFound
+from ..dto.response import AccountResponseDto, BalanceResponseDto, BroadcastTxResponseDto
+from ..exceptions.client import TransactionNotFound, TransportError
 
 ABCI_PATH_ALL_BALANCES = "/cosmos.bank.v1beta1.Query/AllBalances"
 ABCI_PATH_ACCOUNT = "/cosmos.auth.v1beta1.Query/Account"
@@ -33,32 +33,28 @@ class GonkaQueryService:
     def close(self):
         self._transport.close()
 
-    def query_all_balances(self, address: str) -> list[CoinDto]:
-        """Protobuf encode -> ABCI query -> protobuf decode. Returns list of coins."""
+    def query_all_balances(self, address: str) -> BalanceResponseDto:
+        """Protobuf encode -> ABCI query -> protobuf decode."""
         request = QueryAllBalancesRequestDto(address=address)
         data_hex = "0x" + bytes(request).hex()
 
-        code, value = self._abci_query(ABCI_PATH_ALL_BALANCES, data_hex)
+        code, value, log = self._abci_query(ABCI_PATH_ALL_BALANCES, data_hex)
 
         if code != 0 or not value:
-            return []
+            return BalanceResponseDto(address=address, balances=[], code=code, log=log)
 
         resp = QueryAllBalancesResponseDto().parse(value)
-        return resp.balances or []
+        return BalanceResponseDto(address=address, balances=resp.balances or [], code=code, log=log)
 
-    def query_account(self, address: str) -> tuple[int, int]:
-        """Returns (account_number, sequence). Raises AccountNotFoundError if not found."""
+    def query_account(self, address: str) -> AccountResponseDto:
+        """Returns account info. Check is_success before using account_number/sequence."""
         req = QueryAccountRequestDto(address=address)
         data_hex = "0x" + bytes(req).hex()
 
-        code, value = self._abci_query(ABCI_PATH_ACCOUNT, data_hex)
+        code, value, log = self._abci_query(ABCI_PATH_ACCOUNT, data_hex)
 
         if code != 0:
-            if code == CODE_NOT_FOUND:
-                raise AccountNotFoundError(
-                    f"Account not found on chain. Fund the address first: {address}"
-                )
-            raise AccountNotFoundError(f"Account query failed (code={code})")
+            return AccountResponseDto(account_number=0, sequence=0, code=code, log=log)
 
         account_number = 0
         sequence = 0
@@ -68,7 +64,7 @@ class GonkaQueryService:
             account_number = acc.account_number
             sequence = acc.sequence
 
-        return account_number, sequence
+        return AccountResponseDto(account_number=account_number, sequence=sequence, code=code, log=log)
 
     def broadcast_tx(
             self,
@@ -106,22 +102,27 @@ class GonkaQueryService:
         url = f"{self._node_chain_api_url}/cosmos/tx/v1beta1/txs/{tx_hash}"
         response = self._transport.get_raw(url)
 
-        if response.status_code != 200:
+        if response.status_code == 404:
             raise TransactionNotFound(f"Transaction {tx_hash} not found")
+        try:
+            response.raise_for_status()
+        except Exception as e:
+            raise TransportError(str(e), status_code=response.status_code) from e
 
         return response.json()
 
-    def query_total_vesting(self, address: str) -> list[CoinDto]:
-        """GET total vesting for an address. Returns list of coins."""
+    def query_total_vesting(self, address: str) -> BalanceResponseDto:
+        """GET total vesting for an address."""
         if not self._node_chain_api_url:
             raise ValueError("node_chain_api_url is required for query_total_vesting")
 
         url = f"{self._node_chain_api_url}/productscience/inference/streamvesting/total_vesting/{address}"
         data = self._transport.get(url)
-        return [CoinDto(denom=c["denom"], amount=c["amount"]) for c in data.get("total_amount", [])]
+        balances = [CoinDto(denom=c["denom"], amount=c["amount"]) for c in data.get("total_amount", [])]
+        return BalanceResponseDto(address=address, balances=balances)
 
-    def _abci_query(self, path: str, data_hex: str) -> tuple[int, bytes]:
-        """Send ABCI query via RPC. Returns (code, value_bytes)."""
+    def _abci_query(self, path: str, data_hex: str) -> tuple[int, bytes, str]:
+        """Send ABCI query via RPC. Returns (code, value_bytes, log)."""
         url = f"{self._node_chain_rpc_url}/abci_query"
         params = {"path": f'"{path}"', "data": data_hex}
 
@@ -129,6 +130,7 @@ class GonkaQueryService:
 
         abci_resp = result["result"]["response"]
         code = abci_resp.get("code", 0)
+        log = abci_resp.get("log", "")
 
         value = b""
         if code == 0:
@@ -136,4 +138,4 @@ class GonkaQueryService:
             if value_b64:
                 value = base64.b64decode(value_b64)
 
-        return code, value
+        return code, value, log

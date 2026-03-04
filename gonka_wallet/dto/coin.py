@@ -8,6 +8,9 @@ class CoinDto(betterproto.Message):
     denom: str = betterproto.string_field(1)
     amount: str = betterproto.string_field(2)
 
+    def __str__(self) -> str:
+        return f"{self.amount} {self.denom}"
+
 
 class GonkaCoinDto(CoinDto):
     def __init__(self, amount: str):

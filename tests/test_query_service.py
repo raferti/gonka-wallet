@@ -10,9 +10,9 @@ from gonka_wallet.dto.query import (
     QueryAccountResponseDto,
     QueryAllBalancesResponseDto,
 )
-from gonka_wallet.dto.response import BroadcastTxResponseDto
+from gonka_wallet.dto.response import AccountResponseDto, BroadcastTxResponseDto
 from gonka_wallet.dto.transaction import PbAnyDto
-from gonka_wallet.exceptions.client import AccountNotFoundError, TransactionNotFound
+from gonka_wallet.exceptions.client import TransactionNotFound
 
 
 @pytest.fixture
@@ -54,14 +54,18 @@ class TestQueryAllBalances:
         mock_transport.get.return_value = _make_abci_response(0, bytes(balances_resp))
 
         result = query_service.query_all_balances("gonka1abc")
-        assert len(result) == 1
-        assert result[0].denom == "ngonka"
-        assert result[0].amount == "5000"
+        assert result.address == "gonka1abc"
+        assert len(result.balances) == 1
+        assert result.balances[0].denom == "ngonka"
+        assert result.balances[0].amount == "5000"
+        assert result.code == 0
+        assert result.log == ""
 
     def test_empty_balances(self, query_service, mock_transport):
         mock_transport.get.return_value = _make_abci_response(22)
         result = query_service.query_all_balances("gonka1abc")
-        assert result == []
+        assert result.balances == []
+        assert result.code == 22
 
 
 class TestQueryAccount:
@@ -77,14 +81,23 @@ class TestQueryAccount:
         )
         mock_transport.get.return_value = _make_abci_response(0, bytes(account_resp))
 
-        acc_num, seq = query_service.query_account("gonka1abc")
-        assert acc_num == 42
-        assert seq == 7
+        result = query_service.query_account("gonka1abc")
+        assert isinstance(result, AccountResponseDto)
+        assert result.is_success
+        assert result.account_number == 42
+        assert result.sequence == 7
 
     def test_not_found(self, query_service, mock_transport):
         mock_transport.get.return_value = _make_abci_response(CODE_NOT_FOUND)
-        with pytest.raises(AccountNotFoundError):
-            query_service.query_account("gonka1abc")
+        result = query_service.query_account("gonka1abc")
+        assert not result.is_success
+        assert result.code == CODE_NOT_FOUND
+
+    def test_query_error(self, query_service, mock_transport):
+        mock_transport.get.return_value = _make_abci_response(5)
+        result = query_service.query_account("gonka1abc")
+        assert not result.is_success
+        assert result.code == 5
 
 
 class TestBroadcastTx:
@@ -127,9 +140,10 @@ class TestQueryTotalVesting:
             "total_amount": [{"denom": "ngonka", "amount": "3000"}]
         }
         result = query_service.query_total_vesting("gonka1abc")
-        assert len(result) == 1
-        assert result[0].denom == "ngonka"
-        assert result[0].amount == "3000"
+        assert result.address == "gonka1abc"
+        assert len(result.balances) == 1
+        assert result.balances[0].denom == "ngonka"
+        assert result.balances[0].amount == "3000"
 
 
 class TestClose:

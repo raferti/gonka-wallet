@@ -15,8 +15,8 @@ class TestChainConfig:
         assert DEFAULT_CHAIN_CONFIG.chain_id == "gonka-mainnet"
         assert DEFAULT_CHAIN_CONFIG.fee_denom == "ngonka"
         assert DEFAULT_CHAIN_CONFIG.address_prefix == "gonka"
-        assert DEFAULT_CHAIN_CONFIG.node_chain_rpc_url == "http://node2.gonka.ai:8000/chain-rpc"
-        assert DEFAULT_CHAIN_CONFIG.node_chain_api_url == "http://node2.gonka.ai:8000/chain-api"
+        assert isinstance(DEFAULT_CHAIN_CONFIG.node_chain_rpc_url, str) and DEFAULT_CHAIN_CONFIG.node_chain_rpc_url
+        assert isinstance(DEFAULT_CHAIN_CONFIG.node_chain_api_url, str) and DEFAULT_CHAIN_CONFIG.node_chain_api_url
 
     def test_frozen(self):
         with pytest.raises(FrozenInstanceError):

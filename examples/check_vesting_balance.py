@@ -1,20 +1,23 @@
 """Example: query vesting balance for an address."""
 
-from gonka_wallet import GonkaClient, DEFAULT_CHAIN_CONFIG, ngonka_to_gonka
+from gonka_wallet import GonkaClient, DEFAULT_CHAIN_CONFIG
 
 ADDRESS = "gonka1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqnrpw28"  # replace with real address
 
 with GonkaClient(DEFAULT_CHAIN_CONFIG) as client:
-    response = client.vesting_balance(ADDRESS)
+    try:
+        response = client.vesting_balance(ADDRESS)
+    # Handle standard network errors
+    except Exception as e:
+        print(e)
 
-print(f"Address: {response.address}")
-
-if not response.balances:
-    print("Vesting balance: empty (no vesting tokens)")
+# Checking the response from the blockchain
+if response.is_success:
+    if response.balances:
+        print(f"Address: {response.address} ")
+        for coin in response.balances:
+            print(f"{coin.amount} {coin.denom}")
+    else:
+        print(f"Balance is empty")
 else:
-    for coin in response.balances:
-        if coin.denom == "ngonka":
-            gonka = ngonka_to_gonka(int(coin.amount))
-            print(f"  {coin.denom}: {coin.amount} ({gonka:.4f} GONKA)")
-        else:
-            print(f"  {coin.denom}: {coin.amount}")
+    print(f"Query failed (code={response.code}): {response.log}")
