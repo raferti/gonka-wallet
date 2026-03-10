@@ -124,17 +124,3 @@ def _pubkey_to_address(public_key: bytes, prefix: str) -> str:
 
 def _keys_to_str(private_key: bytes, public_key: bytes) -> Tuple[str, str]:
     return private_key.hex(), base64.b64encode(public_key).decode()
-
-
-if __name__ == "__main__":
-    from .client.client import GonkaClient
-
-    # Offline: create wallet without network (uses GONKA by default)
-    wallet = Wallet.create_new()
-    print(f"New wallet: {wallet}")
-    print(f"Address:    {wallet.address}")
-
-    # Online: query balance
-    client = GonkaClient(DEFAULT_CHAIN_CONFIG)
-    bal = client.balance(wallet.address)
-    print(f"Balance:    {bal}")
